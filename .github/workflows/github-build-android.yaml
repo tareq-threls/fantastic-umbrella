@@ -1,0 +1,201 @@
+name: Build Android
+
+on:
+  workflow_dispatch:
+    inputs:
+      environment:
+        description: "select Environment (qa or release)"
+        required: true
+        type: choice
+        options:
+          - qa
+          - release
+        default: qa # Default to development for manual triggers, but you can change this as needed
+      target:
+        description: "select Target (apk or aab)"
+        required: true
+        type: choice
+        options:
+          - apk
+          - aab
+        default: apk # Default to development for manual triggers, but you can change this as needed
+
+jobs:
+  internal-publish:
+    # This job will run on ubuntu virtual machine
+    runs-on: ubuntu-latest
+    if: ${{ github.event.inputs.target == 'aab'}}
+    env:
+      AAB_PATH: build/app/outputs/bundle/release/app-release.aab
+      KEY_PROPS_PATH: android/key.properties
+      SERVICE_ACCOUNT_PATH: store_credentials.json
+    environment:
+      name: ${{ github.event.inputs.environment }}
+
+    steps:
+      #      - name: Output vars
+      #        run: |
+      #          echo "DOMAIN: ${{vars.DOMAIN}}"
+      #          echo "SCHEME: ${{vars.SCHEME}}"
+      #          echo "PAPERTRAIL_PROGRAM_NAME=${{ vars.PAPERTRAIL_PROGRAM_NAME }}"
+      # Setup Java environment in order to build the Android app.
+      - uses: actions/checkout@v3
+      - uses: actions/setup-java@v1
+        with:
+          java-version: "12.x"
+      #      - uses: SpicyPizza/create-envfile@v1
+      #        with:
+      #          file_name: config.production
+      #          envkey_DOMAIN: ${{ vars.DOMAIN }}
+      #          envkey_SCHEME: ${{ vars.SCHEME }}
+      #          envkey_CUSTOMER_HOST: ${{ vars.DOMAIN }}
+      #          envkey_PAPERTRAIL_PROGRAM_NAME: ${{ vars.PAPERTRAIL_PROGRAM_NAME }}
+
+      #          fail_on_empty: true
+
+      #      - name: Decrypt Android keys
+      #        run: sh ./.github/scripts/decrypt_keyfile.sh
+      #        env:
+      #          ANDROID_KEYS_ZIP_PASSPHRASE: ${{ secrets.ANDROID_KEYS_ZIP_PASSPHRASE }}
+      # Setup the flutter environment.
+      - uses: subosito/flutter-action@v2
+        with:
+          channel: "stable" # 'dev', 'alpha', default to: 'stable'
+          # flutter-version: '1.12.x' # you can also specify exact version of flutter
+
+      #      - name: Decode Android key properties
+      #        run: echo "${{ secrets.ANDROID_KEY_PROPERTIES }}" | base64 --decode > ${{ env.KEY_PROPS_PATH }}
+
+      # Decode Android release Service Account
+      #      - name: Decode Android Service Account
+      #        run: echo "${{ secrets.GOOGLE_SERVICE_ACCOUNT }}" | base64 --decode > ${{ env.SERVICE_ACCOUNT_PATH }}
+
+      #      - name: "Check file existence"
+      #        uses: andstor/file-existence-action@v3
+      #        with:
+      #          files: "${{ env.SERVICE_ACCOUNT_PATH }}, ${{ env.KEY_PROPS_PATH }}"
+      #
+      #
+      #      - name: "Read file contents"
+      #        uses: andstor/file-reader-action@v1
+      #        with:
+      #          path: "${{ env.KEY_PROPS_PATH }}"
+
+      - run: flutter --version
+
+      # Get flutter dependencies.
+      - run: flutter pub get
+
+      - run: dart run build_runner build
+
+      # Check for any formatting issues in the code.
+      # - run: flutter format --set-exit-if-changed .
+
+      # Statically analyze the Dart code for any errors.
+      # - run: flutter analyze .
+
+      # Run widget tests for our flutter project.
+      # - run: flutter test
+
+      #     Bump flutter build number
+      - name: Bump build
+        run: |
+          chmod +x ./scripts/bumpBuild.sh
+          ./scripts/bumpBuild.sh
+        shell: bash
+
+      # Build aab.
+      - run: flutter build appbundle --release
+
+        # Upload generated apk to the artifacts.
+      - uses: actions/upload-artifact@master
+        with:
+          name: aab-stores
+          path: ${{ env.AAB_PATH }}
+
+      # Deploy bundle to Google Play internal testing
+  #      - name: Deploy to Play Store (Internal testing)
+  #        uses: r0adkll/upload-google-play@v1
+  #        with:
+  #          serviceAccountJson: ${{ env.SERVICE_ACCOUNT_PATH }}
+  #          packageName: com.twine.pos
+  #          releaseFiles: ${{ env.AAB_PATH }}
+  #          track: internal
+  #          status: draft
+
+  build-apk:
+    # This job will run on ubuntu virtual machine
+    runs-on: ubuntu-latest
+    if: ${{ github.event.inputs.target == 'apk'}}
+    env:
+      APK_PATH: build/app/outputs/flutter-apk/app-release.apk
+      KEY_PROPS_PATH: android/key.properties
+      SERVICE_ACCOUNT_PATH: store_credentials.json
+    environment:
+      name: ${{ github.event.inputs.environment }}
+
+    steps:
+      #      - name: Output vars
+      #        run: |
+      #          echo "DOMAIN: ${{vars.DOMAIN}}"
+      #          echo "SCHEME: ${{vars.SCHEME}}"
+      #          echo "PAPERTRAIL_PROGRAM_NAME: ${{vars.PAPERTRAIL_PROGRAM_NAME}}"
+
+      # Setup Java environment in order to build the Android app.
+      - uses: actions/checkout@v3
+      - uses: actions/setup-java@v1
+        with:
+          java-version: "12.x"
+      #      - uses: SpicyPizza/create-envfile@v1
+      #        with:
+      #          file_name: config.production
+      #          envkey_DOMAIN: ${{ vars.DOMAIN }}
+      #          envkey_SCHEME: ${{ vars.SCHEME }}
+      #          envkey_CUSTOMER_HOST: ${{ vars.DOMAIN }}
+      #          envkey_PAPERTRAIL_PROGRAM_NAME: ${{ vars.PAPERTRAIL_PROGRAM_NAME }}
+      #          fail_on_empty: true
+
+      #      - name: Decrypt Android keys
+      #        run: sh ./.github/scripts/decrypt_keyfile.sh
+      #        env:
+      #          ANDROID_KEYS_ZIP_PASSPHRASE: ${{ secrets.ANDROID_KEYS_ZIP_PASSPHRASE }}
+      # Setup the flutter environment.
+      - uses: subosito/flutter-action@v2
+        with:
+          channel: "stable" # 'dev', 'alpha', default to: 'stable'
+          # flutter-version: '1.12.x' # you can also specify exact version of flutter
+
+      #      - name: Decode Android key properties
+      #        run: echo "${{ secrets.ANDROID_KEY_PROPERTIES }}" | base64 --decode > ${{ env.KEY_PROPS_PATH }}
+      #
+      #      # Decode Android release Service Account
+      #      - name: Decode Android Service Account
+      #        run: echo "${{ secrets.GOOGLE_SERVICE_ACCOUNT }}" | base64 --decode > ${{ env.SERVICE_ACCOUNT_PATH }}
+      #
+      #      - name: "Check file existence"
+      #        uses: andstor/file-existence-action@v3
+      #        with:
+      #          files: "${{ env.SERVICE_ACCOUNT_PATH }}, ${{ env.KEY_PROPS_PATH }}"
+
+      - run: flutter --version
+
+      # Get flutter dependencies.
+
+      - run: dart run build_runner build  --delete-conflicting-outputs
+
+      - run: flutter pub get
+
+      # Check for any formatting issues in the code.
+      # - run: flutter format --set-exit-if-changed .
+      # Statically analyze the Dart code for any errors.
+      # - run: flutter analyze .
+      # Run widget tests for our flutter project.
+      # - run: flutter test
+      # Build aab.
+      - run: flutter build apk --release
+
+        # Upload generated apk to the artifacts.
+      - uses: actions/upload-artifact@master
+        with:
+          name: apk-stores
+          path: ${{ env.APK_PATH }}
