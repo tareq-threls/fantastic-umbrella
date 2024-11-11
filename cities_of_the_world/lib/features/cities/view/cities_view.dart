@@ -6,6 +6,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:infinite_scroll_pagination/infinite_scroll_pagination.dart';
 import '../bloc/cities_bloc.dart';
+import 'city_map_view.dart';
 
 class CitiesView extends StatefulWidget {
   const CitiesView({super.key});
@@ -18,7 +19,9 @@ class _CitiesViewState extends State<CitiesView> {
   final PagingController<int, CityModel> _pagingController =
       PagingController(firstPageKey: 1);
   final TextEditingController _searchController = TextEditingController();
-  Timer? _debounce;  // Timer for debouncing the search
+  Timer? _debounce; // Timer for debouncing the search
+  bool _isMapView = false;
+
   @override
   void initState() {
     super.initState();
@@ -61,7 +64,9 @@ class _CitiesViewState extends State<CitiesView> {
               IconButton(
                 icon: Icon(Icons.map), // Toggle icon based on view
                 onPressed: () {
-                  // Toggle between views
+                  setState(() {
+                    _isMapView = !_isMapView;
+                  });
                 },
               ),
             ],
@@ -82,15 +87,17 @@ class _CitiesViewState extends State<CitiesView> {
               }
             }
           },
-          child: PagedListView<int, CityModel>(
-            pagingController: _pagingController,
-            builderDelegate: PagedChildBuilderDelegate<CityModel>(
-              itemBuilder: (context, city, index) => ListTile(
-                title: Text(city.name ?? ''),
-                subtitle: Text(city.country?.name ?? 'No country data'),
-              ),
-            ),
-          ),
+          child: _isMapView
+              ? CityMapView(cities: _pagingController.itemList ?? [])
+              : PagedListView<int, CityModel>(
+                  pagingController: _pagingController,
+                  builderDelegate: PagedChildBuilderDelegate<CityModel>(
+                    itemBuilder: (context, city, index) => ListTile(
+                      title: Text(city.name ?? ''),
+                      subtitle: Text(city.country?.name ?? 'No country data'),
+                    ),
+                  ),
+                ),
           // This trailing comma makes auto-formatting nicer for build methods.
         )));
   }
@@ -106,6 +113,7 @@ class _CitiesViewState extends State<CitiesView> {
       _onSearch(query);
     });
   }
+
   void _onSearch([String? query]) {
     _pagingController.refresh();
     _pagingController.appendPage([], 1);
